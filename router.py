@@ -35,16 +35,17 @@ def _get_env_str(name: str, default: str) -> str:
 VOCAB_PATH         = _get_env_str("VOCAB_PATH", "artifacts/vocab.pkl")
 INTENT_MODEL_PATH  = _get_env_str("INTENT_MODEL_PATH", "artifacts/intent_clf.pkl")
 
-MIN_HITS           = _get_env_int("MIN_HITS", 1)
-MIN_INTENT_PROB    = _get_env_float("MIN_INTENT_PROB", 0.65)
-SHORT_MIN_PROB     = _get_env_float("SHORT_MIN_PROB", 0.70)
+MIN_HITS           = _get_env_int("MIN_HITS", 2)
+MIN_INTENT_PROB    = _get_env_float("MIN_INTENT_PROB", 0.75)
+SHORT_MIN_PROB     = _get_env_float("SHORT_MIN_PROB", 0.80)
 
 SHORT_TOK_MIN      = _get_env_int("SHORT_TOK_MIN", 2)
 MIN_MATCHES        = _get_env_int("MIN_MATCHES", 2)
 
-COVERAGE_MIN       = _get_env_float("COVERAGE_MIN", 0.30)
-IDF_MIN            = _get_env_float("IDF_MIN", 2.0)
-IDF_STRONG         = _get_env_float("IDF_STRONG", 4.0)
+COVERAGE_MIN       = _get_env_float("COVERAGE_MIN", 0.35)
+IDF_MIN            = _get_env_float("IDF_MIN", 3.0)
+IDF_STRONG         = _get_env_float("IDF_STRONG", 5.0)
+
 
 @dataclass
 class Decision:
@@ -56,16 +57,23 @@ class Decision:
 
 def _looks_nonsense(q: str) -> bool:
     letters = sum(ch.isalpha() for ch in q)
-    total   = max(len(q), 1)
+    digits = sum(ch.isdigit() for ch in q)
+    total = max(len(q), 1)
     alpha_ratio = letters / total
 
-    toks_all = norm_tokens(q)            # includes stopwords
-    toks_ns  = norm_tokens_nostop(q)     # >=3 chars, no stopwords
+    toks_all = norm_tokens(q)  # includes stopwords
+    toks_ns = norm_tokens_nostop(q)  # >=3 chars, no stopwords
 
+    # Heuristics:
+    # - too few tokens
+    # - too many digits relative to letters
+    # - mostly non-alphabetic chars
+    # - any token length==1-2 after nostop cleanup (already filtered), so len check is enough
     return (
-        len(toks_all) < 2
-        or len(toks_ns) < 2
-        or alpha_ratio < 0.6
+            len(toks_all) < 2
+            or len(toks_ns) < 3
+            or alpha_ratio < 0.75
+            or (digits > 0 and (digits / max(letters, 1)) > 0.25)
     )
 
 
@@ -83,7 +91,7 @@ def route(query: str) -> Decision:
 
     hits = keyword_hits(query, VOCAB_PATH)
     # Only allow a small fuzzy boost when we already have lexical evidence
-    if hits >= 1 and len(norm_tokens(query)) >= 3:
+    if hits >= 1 and len(norm_tokens(query)) >= 3 and query.isalpha():
         hits += min(1, fuzzy_bonus(query))
 
     p = intent_score(query, INTENT_MODEL_PATH)
@@ -92,11 +100,21 @@ def route(query: str) -> Decision:
     cov = lexical_coverage(query, VOCAB_PATH)
     idf = idf_score(query, VOCAB_PATH)
 
+    # Hard junk guard: if we have *no* lexical evidence, don't trust the classifier.
+    if hits == 0 and (cov < 0.20 or idf < 2.0):
+        return Decision(
+            path="LLM_ONLY",
+            hits=hits,
+            p_intent=p,
+            tokens=len(toks),
+            notes={"short": short, "coverage": round(cov, 3), "idf": round(idf, 3), "junk_guard": True},
+        )
+
     # Short queries must be truly lexical: at least 2 hits AND minimal coverage/idf
     short_gate = (
             short
             and hits >= 2
-            and cov >= 0.20
+            and cov >= 0.30
             and idf >= IDF_MIN
             and p >= SHORT_MIN_PROB
     )
@@ -105,14 +123,15 @@ def route(query: str) -> Decision:
     main_gate = (
             hits >= MIN_HITS
             and p >= MIN_INTENT_PROB
-            and (cov >= COVERAGE_MIN or idf >= IDF_MIN)
+            and cov >= COVERAGE_MIN
+            and idf >= IDF_MIN
     )
 
     # Classifier override only if (a) not short, (b) very confident, (c) decent coverage, (d) at least one lexical hit
     clf_override = (
             not short
             and p >= 0.93
-            and hits >= 1
+            and hits >= 2
             and cov >= COVERAGE_MIN
             and idf >= IDF_STRONG
     )

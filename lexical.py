@@ -118,8 +118,18 @@ def _ensure_vocab(path: str = _VOCAB_PATH_DEFAULT) -> Dict[str, Any]:
     _vocab = obj
     return _vocab
 
+
+def _known_in_df(tok: str, df_map: Dict[str, int]) -> bool:
+    """True if raw token or its stem exists in the DF map (exact), not just Bloom."""
+    if tok in df_map:
+        return True
+    st = _stem(tok)
+    return st in df_map
+
+
 def norm_tokens(text: str) -> List[str]:
     return [w.lower() for w in _WORD.findall(text)]
+
 
 def _stem(tok: str) -> str:
     try:
@@ -130,16 +140,18 @@ def _stem(tok: str) -> str:
 
 def keyword_hits(query: str, vocab_path: str = _VOCAB_PATH_DEFAULT) -> int:
     vocab = _ensure_vocab(vocab_path)
-    bloom = vocab.get("bloom")
-    if not bloom:
+    df_map: Dict[str, int] = dict(vocab.get("df") or {})
+    if not df_map:
         return 0
 
-    toks = norm_tokens_nostop(query)[:20]  # <-- no stopwords
+    toks = norm_tokens_nostop(query)[:20]
     hits = 0
     for t in toks:
-        if (t in bloom) or ((STEM_NS + _stem(t)) in bloom):
+        # Count only terms truly present in DF map (raw or stem)
+        if _known_in_df(t, df_map):
             hits += 1
     return hits
+
 
 def lexical_coverage(query: str, vocab_path: str = _VOCAB_PATH_DEFAULT) -> float:
     """
@@ -147,16 +159,13 @@ def lexical_coverage(query: str, vocab_path: str = _VOCAB_PATH_DEFAULT) -> float
     Useful to block gibberish even if the classifier is overeager.
     """
     vocab = _ensure_vocab(vocab_path)
-    bloom = vocab.get("bloom")
-    if not bloom:
-        return 0.0
-
+    df_map: Dict[str, int] = dict(vocab.get("df") or {})
     toks = norm_tokens_nostop(query)[:32]
-    if not toks:
+    if not toks or not df_map:
         return 0.0
 
     def has(tok: str) -> bool:
-        return (tok in bloom) or ((STEM_NS + _stem(tok)) in bloom)
+        return _known_in_df(tok, df_map)
 
     hits = sum(1 for t in toks if has(t))
     return hits / max(len(toks), 1)
@@ -167,23 +176,34 @@ def idf_score(query: str, vocab_path: str = _VOCAB_PATH_DEFAULT) -> float:
     IDF = log((N+1)/(df(token)+1)), where N = docs_seen in the artefact.
     """
     vocab = _ensure_vocab(vocab_path)
-    bloom = vocab.get("bloom")
-    df_map = vocab.get("df") or {}
+    df_map: Dict[str, int] = dict(vocab.get("df") or {})
     N = int(vocab.get("docs_seen") or 1)
 
     toks = norm_tokens_nostop(query)[:32]
-    if not toks or not bloom:
+    if not toks or not df_map:
         return 0.0
 
     total = 0.0
+    matched = 0
     for t in toks:
-        # count only tokens we know (raw or stem)
-        known = (t in bloom) or ((STEM_NS + _stem(t)) in bloom)
-        if not known:
-            continue
-        df = int(df_map.get(t, 0))
+        # prefer raw; fall back to stem
+        if t in df_map:
+            df = int(df_map[t])
+        else:
+            st = _stem(t)
+            if st in df_map:
+                df = int(df_map[st])
+            else:
+                continue  # skip unknowns entirely
+        # IDF = log((N+1)/(df+1))
         total += float(__import__("math").log((N + 1) / (df + 1)))
-    return total
+        matched += 1
+
+    if matched == 0:
+        return 0.0
+    # Use mean IDF, not sum (stops single-token spikes)
+    return total / matched
+
 
 def fuzzy_bonus(query: str, top_k: int = 50) -> int:
     """Award small extra hits for close matches to rare terms (typo tolerance)."""
