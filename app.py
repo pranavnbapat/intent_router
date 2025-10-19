@@ -7,6 +7,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Body, Query
 from pydantic import BaseModel, Field
 

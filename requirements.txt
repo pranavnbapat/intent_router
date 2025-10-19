@@ -12,6 +12,7 @@ nltk==3.9.2
 numpy==2.3.4
 pydantic==2.12.3
 pydantic_core==2.41.4
+python-dotenv==1.1.1
 RapidFuzz==3.14.1
 regex==2025.9.18
 scikit-learn==1.7.2

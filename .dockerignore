@@ -36,7 +36,8 @@ venv*/
 Thumbs.db
 
 # Project specific
-output/
+input/
+artifacts/
 *.tmp
 *.bak
 *.swp

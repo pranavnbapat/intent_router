@@ -1,11 +1,19 @@
 services:
-  farm_assistant:
-    container_name: farm_assistant
+  intent_router:
+    container_name: intent_router
     build:
       context: .
-    image: ghcr.io/pranavnbapat/farm_assistant:latest
+    image: ghcr.io/pranavnbapat/intent_router:latest
     restart: unless-stopped
-#    depends_on:
-#      - ollama
     env_file:
       - .env
+    user: "10001:10001"
+    volumes:
+      - ./input:/app/input:ro
+      - ./artifacts:/app/artifacts
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s

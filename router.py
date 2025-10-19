@@ -1,26 +1,50 @@
 # router.py
 
+import os
+
 from dataclasses import dataclass
+from dotenv import load_dotenv
 
 from classifier import intent_score
 from lexical import keyword_hits, fuzzy_bonus, norm_tokens, lexical_coverage, idf_score, norm_tokens_nostop
 
+load_dotenv()
 
-VOCAB_PATH = "artifacts/vocab.pkl"
-INTENT_MODEL_PATH = "artifacts/intent_clf.pkl"
+def _get_env_int(name: str, default: int) -> int:
+    val = os.getenv(name)
+    if val is None or val.strip() == "":
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        return default
 
-MIN_HITS = 1            # lexical gate
-MIN_INTENT_PROB = 0.65  # classifier threshold
-SHORT_MIN_PROB = 0.70   # higher bar for very short queries
+def _get_env_float(name: str, default: float) -> float:
+    val = os.getenv(name)
+    if val is None or val.strip() == "":
+        return default
+    try:
+        return float(val)
+    except ValueError:
+        return default
 
-# require at least this many non-stop tokens for short gate
-SHORT_TOK_MIN = 2
+def _get_env_str(name: str, default: str) -> str:
+    val = os.getenv(name)
+    return default if val is None or val.strip() == "" else val.strip()
 
-MIN_MATCHES = 2
+VOCAB_PATH         = _get_env_str("VOCAB_PATH", "artifacts/vocab.pkl")
+INTENT_MODEL_PATH  = _get_env_str("INTENT_MODEL_PATH", "artifacts/intent_clf.pkl")
 
-COVERAGE_MIN = 0.30   # require at least 20% lexical coverage for RAG
-IDF_MIN = 2.0           # sum of IDF needed for weak queries
-IDF_STRONG = 4.0        # stronger bar for classifier override
+MIN_HITS           = _get_env_int("MIN_HITS", 1)
+MIN_INTENT_PROB    = _get_env_float("MIN_INTENT_PROB", 0.65)
+SHORT_MIN_PROB     = _get_env_float("SHORT_MIN_PROB", 0.70)
+
+SHORT_TOK_MIN      = _get_env_int("SHORT_TOK_MIN", 2)
+MIN_MATCHES        = _get_env_int("MIN_MATCHES", 2)
+
+COVERAGE_MIN       = _get_env_float("COVERAGE_MIN", 0.30)
+IDF_MIN            = _get_env_float("IDF_MIN", 2.0)
+IDF_STRONG         = _get_env_float("IDF_STRONG", 4.0)
 
 @dataclass
 class Decision:
