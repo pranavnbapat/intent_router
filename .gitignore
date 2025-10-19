@@ -1,0 +1,64 @@
+# ---- Python bytecode / C-extensions ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ---- Packaging / build artefacts ----
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+.eggs/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+ENV/
+env/
+venv*/
+.python-version
+
+# ---- Logs / temp ----
+*.log
+log/
+logs/
+*.tmp
+*.bak
+*.swp
+
+# ---- Editors / IDE ----
+.vscode/
+.idea/
+*.iml
+
+# ---- Notebooks ----
+.ipynb_checkpoints/
+
+# ---- Environment files ----
+.env
+.env.*
+!.env.sample
+
+# ---- OS cruft ----
+.DS_Store
+Thumbs.db
+
+# ---- Test / tooling caches ----
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.pytype/
+.ruff_cache/
+.tox/
+.nox/
+.cache/
+.hypothesis/
+.benchmarks/
+
+input
+artifacts
